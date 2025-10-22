@@ -1,47 +1,68 @@
 body {
-    background: #f0f0f0;
-    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #dfe9f3, #ffffff);
+    font-family: 'Segoe UI', Arial, sans-serif;
     display: flex;
     justify-content: center;
     align-items: center;
     height: 100vh;
+    margin: 0;
 }
 
 .calculator {
     background: #fff;
-    border-radius: 10px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    border-radius: 15px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
     padding: 20px;
-    width: 280px;
+    width: 300px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.calculator:hover {
+    transform: scale(1.02);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
 .display {
-    background: #222;
+    background: #1a1a1a;
     color: #0f0;
     font-size: 2em;
-    padding: 10px;
-    border-radius: 5px;
+    padding: 12px;
+    border-radius: 8px;
     text-align: right;
-    margin-bottom: 10px;
+    margin-bottom: 15px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .buttons {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 10px;
+    width: 100%;
 }
 
 .btn {
-    background: #eee;
+    background: #f5f5f5;
     border: none;
     padding: 15px;
     font-size: 1.2em;
-    border-radius: 5px;
+    border-radius: 8px;
     cursor: pointer;
+    transition: background 0.2s ease, transform 0.1s ease;
 }
 
 .btn:hover {
-    background: #ddd;
+    background: #e0e0e0;
+    transform: scale(0.98);
+}
+
+.btn.active {
+    background-color: rgba(0, 0, 0, 0.1);
+    transform: scale(0.95);
+    transition: transform 0.1s, background-color 0.1s;
 }
 
 .equal {
@@ -49,23 +70,54 @@ body {
     color: white;
 }
 
+.equal:hover {
+    background: #006fe6;
+}
+
 .zero {
     grid-column: span 2;
 }
 
 #history {
-    margin-top: 10px;
+    margin-top: 15px;
     font-size: 0.9em;
-    color: #555;
-    height: 60px;
+    color: #333;
+    height: 80px;
     overflow-y: auto;
+    border-top: 1px solid #ccc;
+    padding-top: 8px;
+    width: 100%;
+    text-align: left;
+}
+
+#theme-toggle,
+#about-btn {
+    margin-top: 10px;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    width: 100%;
+    font-size: 1em;
+    transition: background 0.3s ease, transform 0.1s ease;
 }
 
 #theme-toggle {
-    margin-top: 10px;
-    padding: 8px;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    width: 100%;
+    background: #444;
+    color: white;
+}
+
+#theme-toggle:hover {
+    background: #333;
+    transform: scale(0.98);
+}
+
+#about-btn {
+    background: #0078d7;
+    color: white;
+}
+
+#about-btn:hover {
+    background: #005ea6;
+    transform: scale(0.98);
 }
