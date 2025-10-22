@@ -1,0 +1,26 @@
+body.dark {
+    background: #121212;
+}
+
+body.dark .calculator {
+    background: #1e1e1e;
+}
+
+body.dark .display {
+    background: #000;
+    color: #0f0;
+}
+
+body.dark .btn {
+    background: #333;
+    color: #fff;
+}
+
+body.dark .btn:hover {
+    background: #444;
+}
+
+body.dark #theme-toggle {
+    background: #0a84ff;
+    color: #fff;
+}
