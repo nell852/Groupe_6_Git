@@ -5,7 +5,7 @@ let resultDisplayed = false;
 const validChars = /^[0-9+\-*/.()]+$/;
 
 function handleButton(action) {
-    switch (action) {
+    switch (action {
         case "clear":
             currentInput = "";
             display.textContent = "0";
