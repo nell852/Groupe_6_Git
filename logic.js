@@ -18,7 +18,7 @@ function handleButton(action) {
 
         case "=":
             if (!currentInput) return;
-            if (!validChars.test(currentInput)) {
+            if (!validChars.test(currentInput) {
                 display.textContent = "Erreur";
                 return;
             }
