@@ -1,82 +1,109 @@
-import google.generativeai as genai
-import subprocess
+# ai_code_reviewer.py
 import os
+import subprocess
+import sys
+import smtplib
+from email.message import EmailMessage
 from dotenv import load_dotenv
-from send_email import send_email
+import google.generativeai as genai
 
+# Charger les variables d'environnement
 load_dotenv()
 
+# Vérification des variables d'environnement
+if not os.getenv("GEMINI_API_KEY"):
+    print("❌ Erreur : GEMINI_API_KEY non défini.")
+    sys.exit(1)
+if not os.getenv("EMAIL_SENDER") or not os.getenv("EMAIL_PASSWORD"):
+    print("❌ Erreur : EMAIL_SENDER ou EMAIL_PASSWORD non défini.")
+    sys.exit(1)
+
+# Configuration Gemini
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+MODEL_NAME = "models/gemini-2.5-flash"  # Corrigé : utiliser le modèle correct
 
-def get_changed_files():
-    """Liste les fichiers modifiés dans le dernier commit"""
+# Configuration email
+EMAIL_SENDER = os.getenv("EMAIL_SENDER")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+
+def get_last_commit_files():
+    """Retourne la liste des fichiers modifiés dans le dernier commit (JS et Python)."""
     result = subprocess.run(
-        ["git", "diff", "--name-only", "HEAD~1", "HEAD"],
-        capture_output=True, text=True
+        ["git", "diff", "--cached", "--name-only"], capture_output=True, text=True
     )
-    return [f for f in result.stdout.splitlines() if f.endswith(('.js', '.html', '.css'))]
+    files = result.stdout.strip().split("\n")
+    return [f for f in files if f.endswith(".js") or f.endswith(".py")]
 
-def review_code_with_gemini(file_content):
-    """Demande à Gemini d’analyser le code"""
-    model = genai.GenerativeModel("gemini-1.5-flash")
+def get_commit_author_email():
+    """Récupère l'email de l'auteur du dernier commit."""
+    result = subprocess.run(
+        ["git", "config", "user.email"], capture_output=True, text=True
+    )
+    return result.stdout.strip()
+
+def review_code_with_gemini(file_path):
+    """Analyse le code via Gemini et retourne un texte avec les erreurs détectées."""
+    with open(file_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
     prompt = f"""
-    Tu es une IA experte en revue de code. Analyse le code suivant et dis :
-    - Les erreurs critiques qui peuvent casser le déploiement.
-    - Donne une évaluation finale sous la forme :
-      VERDICT: APPROVE  (si le code est sûr)
-      ou
-      VERDICT: REJECT  (si le code est dangereux)
-    Voici le code :
-    {file_content}
-    """
-    response = model.generate_content(prompt)
-    return response.text
+Analyse ce code et détecte les erreurs éventuelles :
+{content}
+
+Retourne uniquement une liste d'erreurs ou 'Aucune erreur détectée'.
+"""
+    try:
+        model = genai.GenerativeModel(MODEL_NAME)
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        return f"Erreur lors de l'analyse du code : {str(e)}"
+
+def send_email(to_email, subject, body):
+    """Envoie un email via SMTP."""
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = EMAIL_SENDER
+    msg["To"] = to_email
+    msg.set_content(body)
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.send_message(msg)
+        print(f"✅ Email envoyé à {to_email}")
+    except Exception as e:
+        print(f"❌ Échec de l'envoi de l'email : {str(e)}")
 
 def main():
-    changed_files = get_changed_files()
-    if not changed_files:
-        print("Aucun fichier modifié détecté.")
+    files = get_last_commit_files()
+    if not files:
+        print("Aucun fichier pertinent pour l'analyse.")
         return
 
-    verdicts = []
-    reviewer_output = ""
+    author_email = get_commit_author_email()
+    errors_detected = False
+    message = ""
 
-    for file in changed_files:
-        with open(file, "r", encoding="utf-8") as f:
-            content = f.read()
-        review = review_code_with_gemini(content)
-        reviewer_output += f"\n--- Analyse de {file} ---\n{review}\n"
-        if "REJECT" in review:
-            verdicts.append("REJECT")
+    for file in files:
+        review = review_code_with_gemini(file)
+        if review.lower() != "aucune erreur détectée":
+            errors_detected = True
+            message += f"\nFichier : {file}\n{review}\n"
 
-    # Récupérer l’auteur du commit
-    author_email = subprocess.run(
-        ["git", "log", "-1", "--pretty=format:%ae"],
-        capture_output=True, text=True
-    ).stdout.strip()
-
-    if "REJECT" in verdicts:
-        print("❌ Code rejeté par l’IA. Envoi d’un e-mail à l’auteur…")
-        send_email(
-            to_email=author_email,
-            subject="🚫 Commit rejeté par l’IA — Erreurs critiques détectées",
-            message=f"""
-Bonjour,
-
-L'IA Gemini a détecté des problèmes dans votre dernier commit pouvant casser le déploiement.
-
-Résumé :
-{reviewer_output}
-
-Veuillez corriger les erreurs et refaire le commit.
-
-Cordialement,
-Votre IA de revue automatique 🤖
-"""
-        )
-        exit(1)
+    if errors_detected:
+        print("❌ Commit annulé : l'IA a détecté des erreurs.")
+        print(message)
+        # Envoi email à l'auteur si email disponible
+        if author_email:
+            send_email(
+                to_email=author_email,
+                subject="Code review automatique - erreurs détectées",
+                body=message
+            )
+        sys.exit(1)  # Annule le commit
     else:
-        print("✅ IA Gemini a approuvé le commit.")
+        print("✅ Aucun problème détecté par l'IA. Commit autorisé.")
 
 if __name__ == "__main__":
     main()
