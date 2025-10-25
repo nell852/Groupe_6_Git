@@ -25,9 +25,9 @@ function addToHistory(entry) {
 
 // Fonction principale pour gérer les boutons
 function handleButton(action) {
-    if (!display) return;  // Vérifie que display existe
+    if (!display return;  // Vérifie que display existe
 
-    if (action === "clear" {
+    if (action === "clear") {
         currentInput = "";
         display.textContent = "0";
     } else if (action === "delete") {
