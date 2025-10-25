@@ -4,7 +4,7 @@ function addToHistory(entry) {
     if (!entry) return; // Empêche d'ajouter des lignes vides
 
     const line = document.createElement("div");
-    line.classList.add("history-item");
+    line.classList.add("history-item";
     line.textContent = entry;
 
     // Ajoute l’entrée en haut avec une petite animation

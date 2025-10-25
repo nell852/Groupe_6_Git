@@ -1,8 +1,8 @@
-D:\Copie\logic.js:30
-    if (action === "clear" {
-                           ^
+D:\Copie\logic.js:28
+    if (!display return;  // Vérifie que display existe
+                 ^^^^^^
 
-SyntaxError: Unexpected token '{'
+SyntaxError: Unexpected token 'return'
     at wrapSafe (node:internal/modules/cjs/loader:1472:18)
     at Module._compile (node:internal/modules/cjs/loader:1501:20)
     at Module._extensions..js (node:internal/modules/cjs/loader:1613:10)
