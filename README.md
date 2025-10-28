@@ -17,3 +17,4 @@ Elle inclut un affichage dynamique, un historique des calculs, un bouton pour ch
 - ✅ Bouton vers une page "À propos"  
 
 
+gemini-2.5-flash

@@ -6,24 +6,38 @@ on:
 
 jobs:
   ai_review:
+    name: Analyse du code avec Gemini
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: 🔄 Récupération du code du dépôt
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: 🐍 Configuration de Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: 📦 Installation des dépendances
         run: |
-          pip install -r requirements.txt
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            echo "⚠️ Aucun fichier requirements.txt trouvé, installation ignorée."
+          fi
 
-      - name: Run AI code reviewer
+      - name: 🤖 Exécution du reviewer IA (Gemini)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-        run: python ai_code_reviewer.py
+        run: |
+          echo "🔍 Lancement de l'analyse IA..."
+          python ai_code_reviewer.py || {
+            echo "❌ L'IA a détecté des erreurs dans le code."
+            exit 1
+          }
+
+      - name: ✅ Validation
+        if: success()
+        run: echo "🎉 Analyse réussie : aucune erreur détectée."
