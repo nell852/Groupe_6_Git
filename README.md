@@ -1,2 +1,2 @@
 # Groupe_6_Git
-depot pour le premier TP du cours de Versioning avec Git et Githubrrrrrr
+depot pour le premier TP du cours de Versioningtyig avec Git et Githubrrrrrr
