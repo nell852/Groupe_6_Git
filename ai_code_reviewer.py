@@ -9,7 +9,7 @@ import google.generativeai as genai
 # === Chargement des variables d'environnement ===
 load_dotenv()
 
-# Récupération directe et validation
+# Récupération des clés d'environnement
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 EMAIL_SENDER = os.getenv("EMAIL_SENDER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
@@ -23,9 +23,9 @@ if not EMAIL_SENDER or not EMAIL_PASSWORD:
 
 # === Configuration Gemini ===
 genai.configure(api_key=GEMINI_API_KEY)
-MODEL_NAME = "models/gemini-2.5-flash"  # ✅ Ton modèle conservé
+MODEL_NAME = "models/gemini-2.5-flash"
 
-# === Configuration Email ===
+# === Fonction d'envoi d'email ===
 def send_email(to_email, subject, body):
     """Envoie un email via SMTP (Gmail)."""
     msg = EmailMessage()
@@ -42,8 +42,7 @@ def send_email(to_email, subject, body):
     except Exception as e:
         print(f"⚠️ Échec de l'envoi de l'email : {str(e)}", file=sys.stderr)
 
-
-# --- Récupère les fichiers en staging (corrigé : nom explicite)
+# --- Récupère les fichiers en staging
 def get_staged_files():
     """Retourne la liste des fichiers JS et Python ajoutés au staging."""
     try:
@@ -60,8 +59,7 @@ def get_staged_files():
         print("⚠️ Impossible de récupérer les fichiers du commit.", file=sys.stderr)
         return []
 
-
-# --- Récupère l'email du committeur
+# --- Récupère l'email de l'auteur du commit
 def get_commit_author_email():
     try:
         result = subprocess.run(
@@ -71,10 +69,9 @@ def get_commit_author_email():
     except Exception:
         return None
 
-
-# --- Analyse du code avec Gemini
+# --- Analyse uniquement la syntaxe avec Gemini
 def review_code_with_gemini(file_path):
-    """Analyse un fichier avec Gemini et retourne les erreurs détectées."""
+    """Analyse uniquement les erreurs de syntaxe du fichier."""
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -86,13 +83,15 @@ def review_code_with_gemini(file_path):
             return f"⚠️ Impossible de lire {file_path} : {str(e)}"
 
     prompt = f"""
-Analyse ce code et détecte les erreurs éventuelles.
+Tu es un **analyseur de syntaxe** pour développeurs.
+Analyse ce code et détecte UNIQUEMENT les **erreurs de syntaxe** (ex : parenthèses manquantes, indentation, accolades non fermées, mot-clé invalide...).
+
 Code :
 {content}
 
-Retourne UNIQUEMENT :
-- une liste d'erreurs claires si des problèmes sont trouvés
-- sinon, exactement le texte : "Aucune erreur détectée"
+Retourne exactement :
+- "Aucune erreur syntaxique détectée" si tout est correct.
+- Sinon, liste uniquement les erreurs syntaxiques détectées (sans explications logiques ni suggestions).
 """
 
     try:
@@ -102,12 +101,11 @@ Retourne UNIQUEMENT :
     except Exception as e:
         return f"⚠️ Erreur lors de l'analyse de {file_path} : {str(e)}"
 
-
 # --- Fonction principale
 def main():
     files = get_staged_files()
     if not files:
-        print("ℹ️ Aucun fichier pertinent détecté pour l'analyse.")
+        print("ℹ️ Aucun fichier Python ou JS détecté pour l'analyse.")
         sys.exit(0)
 
     author_email = get_commit_author_email()
@@ -117,31 +115,29 @@ def main():
     for file in files:
         review = review_code_with_gemini(file)
 
-        # Vérification plus tolérante pour éviter les faux positifs
-        if "aucune erreur détectée" not in review.lower():
+        if "aucune erreur syntaxique détectée" not in review.lower():
             errors_detected = True
             message += f"\nFichier : {file}\n{review}\n"
 
     if errors_detected:
-        print("❌ L'IA a détecté des erreurs dans le code :")
+        print("❌ Des erreurs de syntaxe ont été détectées :")
         print(message)
         if author_email:
             send_email(
                 to_email=author_email,
-                subject="🚫 Code review automatique - Erreurs détectées",
+                subject="🚫 Erreurs de syntaxe détectées - Commit bloqué",
                 body=message
             )
-        sys.exit(1)  # 🚫 Bloque le commit
+        sys.exit(1)  # Bloque le commit
     else:
-        print("✅ Aucune erreur détectée. Commit autorisé.")
+        print("✅ Aucune erreur syntaxique détectée. Commit autorisé.")
         if author_email:
             send_email(
                 to_email=author_email,
-                subject="✅ Code review automatique - Commit validé",
-                body="Aucune erreur détectée. Votre commit a été validé avec succès."
+                subject="✅ Vérification syntaxique réussie - Commit validé",
+                body="Aucune erreur syntaxique détectée. Votre commit a été validé."
             )
         sys.exit(0)
-
 
 if __name__ == "__main__":
     main()

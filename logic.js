@@ -6,9 +6,9 @@ const display = document.getElementById("display");
 const historyContainer = document.getElementById("history");
 const themeToggle = document.getElementById("theme-toggle");
 
-// Fonction sécurisée pour évaluer les expressions
-function safeEval(expression) {
-    if (/^[0-9+\-*/(). ]+$/.test(expression)) {
+// Fonction sécurisée pour évaluer les expressions (prise en charge des nombres décimaux)
+function safeEval(expression {
+    if (/^[0-9+\-*/().\s]+$/.test(expression)) { // Ajout du "." et \s pour espaces
         return Function('"use strict";return (' + expression + ')')();
     } else {
         throw new Error("Expression invalide");
@@ -30,6 +30,7 @@ function handleButton(action) {
     if (action === "clear") {
         currentInput = "";
         display.textContent = "0";
+        resultDisplayed = false;
     } else if (action === "delete") {
         currentInput = currentInput.slice(0, -1);
         display.textContent = currentInput || "0";
@@ -42,13 +43,21 @@ function handleButton(action) {
             resultDisplayed = true;
         } catch {
             display.textContent = "Erreur";
+            currentInput = "";       // 🔹 Réinitialisation après erreur
+            resultDisplayed = false; // 🔹 Réinitialisation état
         }
     } else {
         if (resultDisplayed) {
-            currentInput = "";
+            // 🔹 Si un résultat vient d'être affiché et qu'on appuie sur un opérateur
+            if (["+", "-", "*", "/"].includes(action)) {
+                currentInput = display.textContent + action;
+            } else {
+                currentInput = action; // Sinon, on recommence une nouvelle saisie
+            }
             resultDisplayed = false;
+        } else {
+            currentInput += action;
         }
-        currentInput += action;
         display.textContent = currentInput;
     }
 }
