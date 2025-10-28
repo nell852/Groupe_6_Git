@@ -25,14 +25,17 @@ if not EMAIL_SENDER or not EMAIL_PASSWORD:
 genai.configure(api_key=GEMINI_API_KEY)
 MODEL_NAME = "models/gemini-2.5-flash"
 
-# === Fonction d'envoi d'email ===
-def send_email(to_email, subject, body):
-    """Envoie un email via SMTP (Gmail)."""
+# === Fonction d'envoi d'email HTML ===
+def send_email(to_email, subject, body, is_html=False):
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = EMAIL_SENDER
     msg["To"] = to_email
-    msg.set_content(body)
+
+    if is_html:
+        msg.add_alternative(body, subtype="html")
+    else:
+        msg.set_content(body)
 
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
@@ -44,7 +47,6 @@ def send_email(to_email, subject, body):
 
 # --- Récupère les fichiers en staging
 def get_staged_files():
-    """Retourne la liste des fichiers JS et Python ajoutés au staging."""
     try:
         result = subprocess.run(
             ["git", "diff", "--cached", "--name-only"],
@@ -71,7 +73,6 @@ def get_commit_author_email():
 
 # --- Analyse uniquement la syntaxe avec Gemini
 def review_code_with_gemini(file_path):
-    """Analyse uniquement les erreurs de syntaxe du fichier."""
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -123,19 +124,45 @@ def main():
         print("❌ Des erreurs de syntaxe ont été détectées :")
         print(message)
         if author_email:
+            html_body = f"""
+            <html>
+              <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                <h2 style="color: #D32F2F;">🚫 Des erreurs de syntaxe ont été détectées !</h2>
+                <p>Bonjour 👋,</p>
+                <p>Votre commit contient des fichiers avec des erreurs de syntaxe :</p>
+                <div style="background:#f9f9f9; padding:10px; border-radius:8px;">
+                  <pre style="white-space: pre-wrap; font-family: monospace;">{message}</pre>
+                </div>
+                <p>Merci de corriger ces erreurs avant de recommitter. 💡</p>
+                <p style="margin-top:20px;">— Votre assistant de code automatisé 🤖</p>
+              </body>
+            </html>
+            """
             send_email(
                 to_email=author_email,
                 subject="🚫 Erreurs de syntaxe détectées - Commit bloqué",
-                body=message
+                body=html_body,
+                is_html=True
             )
         sys.exit(1)  # Bloque le commit
     else:
         print("✅ Aucune erreur syntaxique détectée. Commit autorisé.")
         if author_email:
+            html_body_success = """
+            <html>
+              <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                <h2 style="color: #388E3C;">✅ Vérification syntaxique réussie !</h2>
+                <p>Bravo 🎉, aucun problème détecté dans votre commit.</p>
+                <p>Vous pouvez continuer vos développements en toute sérénité !</p>
+                <p style="margin-top:20px;">— Votre assistant de code automatisé 🤖</p>
+              </body>
+            </html>
+            """
             send_email(
                 to_email=author_email,
                 subject="✅ Vérification syntaxique réussie - Commit validé",
-                body="Aucune erreur syntaxique détectée. Votre commit a été validé."
+                body=html_body_success,
+                is_html=True
             )
         sys.exit(0)
 

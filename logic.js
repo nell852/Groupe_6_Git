@@ -7,7 +7,7 @@ const historyContainer = document.getElementById("history");
 const themeToggle = document.getElementById("theme-toggle");
 
 // Fonction sécurisée pour évaluer les expressions (prise en charge des nombres décimaux)
-function safeEval(expression {
+function safeEval(expression) {
     if (/^[0-9+\-*/().\s]+$/.test(expression)) { // Ajout du "." et \s pour espaces
         return Function('"use strict";return (' + expression + ')')();
     } else {
