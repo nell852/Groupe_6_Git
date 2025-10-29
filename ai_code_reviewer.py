@@ -1,5 +1,4 @@
 import os
-import subprocess
 import sys
 import re
 import smtplib
@@ -38,7 +37,12 @@ def send_email(to_email, subject, body, attachments=None, is_html=False):
     if attachments:
         for file_path in attachments:
             with open(file_path, "rb") as f:
-                msg.add_attachment(f.read(), maintype="application", subtype="pdf", filename=os.path.basename(file_path))
+                msg.add_attachment(
+                    f.read(),
+                    maintype="application",
+                    subtype="pdf",
+                    filename=os.path.basename(file_path)
+                )
 
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
@@ -69,17 +73,25 @@ def generate_pdf_report(errors_dict):
     doc.build(content)
     return pdf_path
 
-# === Analyse syntaxique ===
-def get_staged_files():
-    result = subprocess.run(["git", "diff", "--cached", "--name-only"], capture_output=True, text=True)
-    return [f for f in result.stdout.split("\n") if f.endswith((".js", ".py"))]
+# === Parcourir tous les fichiers du repo ===
+def get_files_to_review():
+    files = []
+    ignore_dirs = {".git", "venv", "__pycache__"}
+    for root, dirs, filenames in os.walk("."):
+        dirs[:] = [d for d in dirs if d not in ignore_dirs]  # ignorer certains dossiers
+        for f in filenames:
+            if f.endswith((".py", ".js")):
+                files.append(os.path.join(root, f))
+    return files
 
+# === Analyse syntaxique avec Gemini ===
 def review_code_with_gemini(file_path):
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             code = f.read()
     except:
         return "⚠️ Impossible de lire le fichier."
+
     prompt = f"""
 Analyse uniquement les **erreurs de syntaxe** dans ce code :
 {code}
@@ -114,16 +126,14 @@ def update_readme_badge(success):
         f.seek(0)
         f.write(new_content)
         f.truncate()
-    subprocess.run(["git", "add", "README.md"])
 
 # === Programme principal ===
 def main():
-    files = get_staged_files()
+    files = get_files_to_review()
     if not files:
         print("ℹ️ Aucun fichier à analyser.")
         sys.exit(0)
 
-    author_email = subprocess.run(["git", "config", "user.email"], capture_output=True, text=True).stdout.strip()
     errors = {}
     has_error = False
 
@@ -136,12 +146,13 @@ def main():
     pdf_path = generate_pdf_report(errors)
     update_readme_badge(not has_error)
 
+    author_email = EMAIL_SENDER  # sur GitHub Actions, on peut envoyer au compte principal
     if has_error:
-        print("❌ Des erreurs syntaxiques ont été détectées.")
+        print("❌ Des erreurs syntaxiques ont été détectées !")
         html_body = f"""
         <html><body style="font-family:Arial;">
         <h2 style="color:#D32F2F;">🚫 Des erreurs syntaxiques ont été détectées !</h2>
-        <p>Merci de les corriger avant de recommitter.</p>
+        <p>Merci de les corriger avant de committer.</p>
         <p><b>Fichiers affectés :</b></p>
         <pre>{'<br>'.join(errors.keys())}</pre>
         <p>Le rapport PDF est joint à cet email.</p>
