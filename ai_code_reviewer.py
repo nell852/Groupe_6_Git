@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import re
 import smtplib
 from email.message import EmailMessage
 from dotenv import load_dotenv
