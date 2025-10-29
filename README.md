@@ -22,3 +22,4 @@ Elle inclut un affichage dynamique, un historique des calculs, un bouton pour ch
 Ce badge affiche automatiquement :
 - ❌ Rouge : le workflow a échoué (erreurs détectées par l’IA)
 ![](https://img.shields.io/badge/AI%20Code%20Review-❌%20Échec-red?style=for-the-badge)
+![](https://img.shields.io/badge/AI%20Code%20Review-❌%20Échec-red?style=for-the-badge)
