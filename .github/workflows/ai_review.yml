@@ -9,8 +9,8 @@ jobs:
     name: Analyse du code avec Gemini
     runs-on: ubuntu-latest
     permissions:
-      contents: write       # Nécessaire pour modifier le README (badge)
-      pull-requests: write  # Nécessaire pour créer des PR automatiques
+      contents: write       # Pour modifier le README
+      pull-requests: write  # Pour créer des PR automatiques
 
     steps:
       - name: 🔄 Récupération du code du dépôt
@@ -27,6 +27,12 @@ jobs:
             pip install -r requirements.txt
           else
             echo "⚠️ Aucun fichier requirements.txt trouvé, installation ignorée."
+
+      - name: 🗑️ Supprimer l’ancien rapport PDF
+        run: |
+          if [ -f ai_report.pdf ]; then
+            rm ai_report.pdf
+            echo "Ancien rapport supprimé"
           fi
 
       - name: 🤖 Exécution du reviewer IA (Gemini)
@@ -43,13 +49,15 @@ jobs:
             exit 1
           }
 
-      - name: 🧾 Vérification du rapport PDF
+      - name: 🧾 Vérification du rapport PDF généré
         id: check_pdf
         run: |
           if [ -f ai_report.pdf ]; then
             echo "file_exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Rapport PDF généré"
           else
             echo "file_exists=false" >> $GITHUB_OUTPUT
+            echo "❌ Le rapport PDF n'a pas été généré !"
           fi
 
       - name: 🧾 Upload du rapport PDF (si généré)
@@ -75,7 +83,7 @@ jobs:
           git config user.email "ai-reviewer@github.com"
           git add README.md
           git commit -m "🔄 Mise à jour automatique du badge AI Code Review" || echo "Aucun changement à committer"
-          git push origin HEAD:${{ github.ref }}
+          git push origin HEAD:${{ github.ref }} || echo "Push échoué (branche distante peut-être protégée)"
 
       - name: 🔁 Création automatique d’une Pull Request si push refusé
         if: failure()
