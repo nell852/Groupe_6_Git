@@ -4,15 +4,17 @@ import subprocess
 import sys
 import smtplib
 from email.message import EmailMessage
+from typing import List, Optional
 from dotenv import load_dotenv
 import google.generativeai as genai
-from typing import List, Optional
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
 
 # === Chargement des variables d'environnement ===
 load_dotenv()
 
-# === Récupération des clés d'environnement ===
 GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
 EMAIL_SENDER: Optional[str] = os.getenv("EMAIL_SENDER")
 EMAIL_PASSWORD: Optional[str] = os.getenv("EMAIL_PASSWORD")
@@ -29,17 +31,15 @@ genai.configure(api_key=GEMINI_API_KEY)
 MODEL_NAME: str = "models/gemini-2.5-flash"
 
 
-# === Fonction d'envoi d'email HTML ===
-def send_email(to_email: str, subject: str, body: str, is_html: bool = False) -> None:
-    """
-    Envoie un email via SMTP (Gmail).
-    
-    Args:
-        to_email: Adresse du destinataire.
-        subject: Sujet du mail.
-        body: Contenu du message.
-        is_html: Définit si le message est au format HTML.
-    """
+# === Fonction d'envoi d'email HTML avec option pièce jointe ===
+def send_email(
+    to_email: str,
+    subject: str,
+    body: str,
+    is_html: bool = False,
+    attachment_path: Optional[str] = None
+) -> None:
+    """Envoie un email avec ou sans pièce jointe PDF."""
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = EMAIL_SENDER
@@ -50,27 +50,53 @@ def send_email(to_email: str, subject: str, body: str, is_html: bool = False) ->
     else:
         msg.set_content(body)
 
+    # 🔗 Ajout de la pièce jointe si elle existe
+    if attachment_path and os.path.exists(attachment_path):
+        with open(attachment_path, "rb") as f:
+            msg.add_attachment(
+                f.read(),
+                maintype="application",
+                subtype="pdf",
+                filename=os.path.basename(attachment_path)
+            )
+
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(EMAIL_SENDER, EMAIL_PASSWORD)
             server.send_message(msg)
-        print(f"📧 Email envoyé à {to_email}")
+        print(f"📧 Email envoyé à {to_email} {'avec pièce jointe' if attachment_path else 'sans pièce jointe'}.")
     except Exception as e:
         print(f"⚠️ Échec de l'envoi de l'email : {str(e)}", file=sys.stderr)
 
 
-# --- Récupère les fichiers en staging ---
+# === Génération d’un rapport PDF ===
+def generate_pdf_report(errors: str, filename: str = "ai_report.pdf") -> str:
+    """Crée un rapport PDF contenant les erreurs détectées."""
+    doc = SimpleDocTemplate(filename, pagesize=A4)
+    styles = getSampleStyleSheet()
+    elements: List = []
+
+    elements.append(Paragraph("🚫 Rapport d'analyse syntaxique", styles["Title"]))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph("Voici les erreurs détectées :", styles["Normal"]))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph(f"<pre>{errors}</pre>", styles["Code"]))
+
+    doc.build(elements)
+    return filename
+
+
+# === Récupère les fichiers mis en staging ===
 def get_staged_files() -> List[str]:
-    """
-    Retourne la liste des fichiers actuellement en staging (prêts à être commités).
-    Filtre uniquement les fichiers .js et .py.
-    """
+    """Retourne la liste des fichiers Python et JS en staging."""
     try:
         result = subprocess.run(
             ["git", "diff", "--cached", "--name-only"],
-            capture_output=True, text=True, check=True
+            capture_output=True,
+            text=True,
+            check=True
         )
-        files: List[str] = result.stdout.strip().split("\n")
+        files = result.stdout.strip().split("\n")
         return [f for f in files if f.endswith(".js") or f.endswith(".py")]
     except FileNotFoundError:
         print("❌ Git non trouvé sur le système. Vérifie ton installation Git.", file=sys.stderr)
@@ -80,36 +106,27 @@ def get_staged_files() -> List[str]:
         return []
 
 
-# --- Récupère l'email de l'auteur du commit ---
+# === Récupère l'email de l'auteur du commit ===
 def get_commit_author_email() -> Optional[str]:
-    """
-    Récupère l'adresse email de l'auteur du commit actuel.
-    """
+    """Retourne l'adresse email configurée dans Git."""
     try:
         result = subprocess.run(
             ["git", "config", "user.email"],
-            capture_output=True, text=True, check=True
+            capture_output=True,
+            text=True,
+            check=True
         )
         return result.stdout.strip()
     except Exception:
         return None
 
 
-# --- Analyse uniquement la syntaxe avec Gemini ---
+# === Analyse de la syntaxe via Gemini ===
 def review_code_with_gemini(file_path: str) -> str:
-    """
-    Analyse le fichier donné avec l'IA Gemini pour détecter uniquement les erreurs de syntaxe.
-    
-    Args:
-        file_path: Chemin du fichier à analyser.
-
-    Returns:
-        Une chaîne décrivant les erreurs de syntaxe détectées,
-        ou "Aucune erreur syntaxique détectée".
-    """
+    """Analyse un fichier pour détecter uniquement les erreurs de syntaxe."""
     try:
         with open(file_path, "r", encoding="utf-8") as f:
-            content: str = f.read()
+            content = f.read()
     except UnicodeDecodeError:
         try:
             with open(file_path, "r", encoding="latin-1") as f:
@@ -119,14 +136,15 @@ def review_code_with_gemini(file_path: str) -> str:
 
     prompt: str = f"""
 Tu es un **analyseur de syntaxe** pour développeurs.
-Analyse ce code et détecte UNIQUEMENT les **erreurs de syntaxe** (ex : parenthèses manquantes, indentation, accolades non fermées, mot-clé invalide...).
+Analyse ce code et détecte UNIQUEMENT les **erreurs de syntaxe** 
+(ex : parenthèses manquantes, indentation, accolades non fermées, mot-clé invalide...).
 
 Code :
 {content}
 
 Retourne exactement :
 - "Aucune erreur syntaxique détectée" si tout est correct.
-- Sinon, liste uniquement les erreurs syntaxiques détectées (sans explications logiques ni suggestions).
+- Sinon, liste uniquement les erreurs syntaxiques détectées (sans explications supplémentaires).
 """
 
     try:
@@ -137,15 +155,9 @@ Retourne exactement :
         return f"⚠️ Erreur lors de l'analyse de {file_path} : {str(e)}"
 
 
-# --- Fonction principale ---
+# === Fonction principale ===
 def main() -> None:
-    """
-    Point d'entrée principal :
-    - Récupère les fichiers modifiés
-    - Analyse leur syntaxe via Gemini
-    - Bloque le commit si des erreurs sont détectées
-    - Envoie un email à l’auteur
-    """
+    """Point d’entrée principal du script."""
     files: List[str] = get_staged_files()
     if not files:
         print("ℹ️ Aucun fichier Python ou JS détecté pour l'analyse.")
@@ -164,6 +176,9 @@ def main() -> None:
     if errors_detected:
         print("❌ Des erreurs de syntaxe ont été détectées :")
         print(message)
+
+        pdf_path: str = generate_pdf_report(message)
+
         if author_email:
             html_body: str = f"""
             <html>
@@ -174,6 +189,7 @@ def main() -> None:
                 <div style="background:#f9f9f9; padding:10px; border-radius:8px;">
                   <pre style="white-space: pre-wrap; font-family: monospace;">{message}</pre>
                 </div>
+                <p>Un rapport PDF est également joint à cet email.</p>
                 <p>Merci de corriger ces erreurs avant de recommitter. 💡</p>
                 <p style="margin-top:20px;">— Votre assistant de code automatisé 🤖</p>
               </body>
@@ -183,9 +199,12 @@ def main() -> None:
                 to_email=author_email,
                 subject="🚫 Erreurs de syntaxe détectées - Commit bloqué",
                 body=html_body,
-                is_html=True
+                is_html=True,
+                attachment_path=pdf_path
             )
-        sys.exit(1)
+
+        sys.exit(1)  # 🔒 Bloque le commit
+
     else:
         print("✅ Aucune erreur syntaxique détectée. Commit autorisé.")
         if author_email:
@@ -205,6 +224,7 @@ def main() -> None:
                 body=html_body_success,
                 is_html=True
             )
+
         sys.exit(0)
 
 
