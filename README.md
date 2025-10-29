@@ -17,4 +17,10 @@ Elle inclut un affichage dynamique, un historique des calculs, un bouton pour ch
 - ✅ Bouton vers une page "À propos"  
 
 
-gemini-2.5-flash
+# 🤖 AI Code Review Status
+
+![AI Code Review](https://img.shields.io/badge/AI%20Code%20Review-PASS-green)
+
+Ce badge affiche automatiquement :
+- ✅ Vert : le workflow AI Code Review a réussi (aucune erreur détectée)
+- ❌ Rouge : le workflow a échoué (erreurs détectées par l’IA)

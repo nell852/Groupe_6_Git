@@ -8,6 +8,9 @@ jobs:
   ai_review:
     name: Analyse du code avec Gemini
     runs-on: ubuntu-latest
+    permissions:
+      contents: write       # Nécessaire pour modifier le README (badge)
+      pull-requests: write  # Nécessaire pour créer des PR automatiques
 
     steps:
       - name: 🔄 Récupération du code du dépôt
@@ -29,8 +32,10 @@ jobs:
       - name: 🤖 Exécution du reviewer IA (Gemini)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          EMAIL_USER: ${{ secrets.EMAIL_USER }}
-          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
         run: |
           echo "🔍 Lancement de l'analyse IA..."
           python ai_code_reviewer.py || {
@@ -38,6 +43,38 @@ jobs:
             exit 1
           }
 
-      - name: ✅ Validation
-        if: success()
-        run: echo "🎉 Analyse réussie : aucune erreur détectée."
+      - name: 🧾 Upload du rapport PDF (si généré)
+        if: always() && exists('ai_report.pdf')
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Review-Report
+          path: ai_report.pdf
+
+      - name: 🏷️ Mise à jour du badge AI Review dans le README
+        if: always()
+        run: |
+          STATUS="❌ Échec"
+          COLOR="red"
+          if [ "${{ job.status }}" == "success" ]; then
+            STATUS="✅ Succès"
+            COLOR="green"
+          fi
+          BADGE_URL="https://img.shields.io/badge/AI%20Code%20Review-${STATUS// /%20}-${COLOR}?style=for-the-badge"
+          sed -i '/AI Code Review/d' README.md || true
+          echo "![](${BADGE_URL})" >> README.md
+          git config user.name "AI Reviewer Bot"
+          git config user.email "ai-reviewer@github.com"
+          git add README.md
+          git commit -m "🔄 Mise à jour automatique du badge AI Code Review"
+          git push origin HEAD:${{ github.ref }}
+
+      - name: 🔁 Création automatique d’une Pull Request si push refusé
+        if: failure()
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ai-review-fix-${{ github.run_id }}
+          title: "🚨 Correction automatique suite à une erreur IA"
+          body: |
+            L’analyse IA a détecté des erreurs dans le code.
+            Consulte le rapport PDF joint et corrige les problèmes avant validation.

@@ -5,37 +5,42 @@ import smtplib
 from email.message import EmailMessage
 from dotenv import load_dotenv
 import google.generativeai as genai
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+import requests
 
 # === Chargement des variables d'environnement ===
 load_dotenv()
 
-# Récupération des clés d'environnement
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 EMAIL_SENDER = os.getenv("EMAIL_SENDER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY")  # ex: "user/repo"
 
 if not GEMINI_API_KEY:
-    print("❌ Erreur : GEMINI_API_KEY non défini.", file=sys.stderr)
-    sys.exit(1)
-if not EMAIL_SENDER or not EMAIL_PASSWORD:
-    print("❌ Erreur : EMAIL_SENDER ou EMAIL_PASSWORD non défini.", file=sys.stderr)
+    print("❌ GEMINI_API_KEY manquant.", file=sys.stderr)
     sys.exit(1)
 
 # === Configuration Gemini ===
 genai.configure(api_key=GEMINI_API_KEY)
 MODEL_NAME = "models/gemini-2.5-flash"
 
-# === Fonction d'envoi d'email HTML ===
-def send_email(to_email, subject, body, is_html=False):
+# === Email ===
+def send_email(to_email, subject, body, attachments=None, is_html=False):
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = EMAIL_SENDER
     msg["To"] = to_email
-
+    msg.set_content("Ce mail contient un rapport d'analyse.")
     if is_html:
         msg.add_alternative(body, subtype="html")
-    else:
-        msg.set_content(body)
+
+    if attachments:
+        for file_path in attachments:
+            with open(file_path, "rb") as f:
+                msg.add_attachment(f.read(), maintype="application", subtype="pdf", filename=os.path.basename(file_path))
 
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
@@ -43,127 +48,139 @@ def send_email(to_email, subject, body, is_html=False):
             server.send_message(msg)
         print(f"📧 Email envoyé à {to_email}")
     except Exception as e:
-        print(f"⚠️ Échec de l'envoi de l'email : {str(e)}", file=sys.stderr)
+        print(f"⚠️ Échec de l'envoi de l'email : {e}", file=sys.stderr)
 
-# --- Récupère les fichiers en staging
+# === PDF ===
+def generate_pdf_report(errors_dict):
+    pdf_path = "AI_Code_Review_Report.pdf"
+    doc = SimpleDocTemplate(pdf_path, pagesize=A4)
+    styles = getSampleStyleSheet()
+    content = []
+
+    content.append(Paragraph("🤖 Rapport d'Analyse Syntaxique - IA Gemini", styles["Title"]))
+    content.append(Spacer(1, 20))
+
+    if not errors_dict:
+        content.append(Paragraph("✅ Aucun problème détecté !", styles["Normal"]))
+    else:
+        for file, errors in errors_dict.items():
+            content.append(Paragraph(f"<b>Fichier :</b> {file}", styles["Heading3"]))
+            content.append(Paragraph(errors.replace("\n", "<br/>"), styles["Normal"]))
+            content.append(Spacer(1, 15))
+
+    doc.build(content)
+    return pdf_path
+
+# === Analyse syntaxique ===
 def get_staged_files():
-    try:
-        result = subprocess.run(
-            ["git", "diff", "--cached", "--name-only"],
-            capture_output=True, text=True, check=True
-        )
-        files = result.stdout.strip().split("\n")
-        return [f for f in files if f.endswith(".js") or f.endswith(".py")]
-    except FileNotFoundError:
-        print("❌ Git non trouvé sur le système. Vérifie ton installation Git.", file=sys.stderr)
-        sys.exit(1)
-    except subprocess.CalledProcessError:
-        print("⚠️ Impossible de récupérer les fichiers du commit.", file=sys.stderr)
-        return []
+    result = subprocess.run(["git", "diff", "--cached", "--name-only"], capture_output=True, text=True)
+    return [f for f in result.stdout.split("\n") if f.endswith((".js", ".py"))]
 
-# --- Récupère l'email de l'auteur du commit
-def get_commit_author_email():
-    try:
-        result = subprocess.run(
-            ["git", "config", "user.email"], capture_output=True, text=True, check=True
-        )
-        return result.stdout.strip()
-    except Exception:
-        return None
-
-# --- Analyse uniquement la syntaxe avec Gemini
 def review_code_with_gemini(file_path):
     try:
         with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
-    except UnicodeDecodeError:
-        try:
-            with open(file_path, "r", encoding="latin-1") as f:
-                content = f.read()
-        except Exception as e:
-            return f"⚠️ Impossible de lire {file_path} : {str(e)}"
-
+            code = f.read()
+    except:
+        return "⚠️ Impossible de lire le fichier."
     prompt = f"""
-Tu es un **analyseur de syntaxe** pour développeurs.
-Analyse ce code et détecte UNIQUEMENT les **erreurs de syntaxe** (ex : parenthèses manquantes, indentation, accolades non fermées, mot-clé invalide...).
+Analyse uniquement les **erreurs de syntaxe** dans ce code :
+{code}
 
-Code :
-{content}
-
-Retourne exactement :
-- "Aucune erreur syntaxique détectée" si tout est correct.
-- Sinon, liste uniquement les erreurs syntaxiques détectées (sans explications logiques ni suggestions).
+Retourne :
+- "Aucune erreur syntaxique détectée" si c’est correct.
+- Sinon, liste les erreurs détectées.
 """
-
+    model = genai.GenerativeModel(MODEL_NAME)
     try:
-        model = genai.GenerativeModel(MODEL_NAME)
-        response = model.generate_content(prompt)
-        return response.text.strip()
+        res = model.generate_content(prompt)
+        return res.text.strip()
     except Exception as e:
-        return f"⚠️ Erreur lors de l'analyse de {file_path} : {str(e)}"
+        return f"⚠️ Erreur Gemini : {e}"
 
-# --- Fonction principale
+# === Badge README ===
+def update_readme_badge(success):
+    badge_url = (
+        "https://img.shields.io/badge/AI%20Code%20Review-PASS-green"
+        if success else "https://img.shields.io/badge/AI%20Code%20Review-FAIL-red"
+    )
+    badge_md = f"![AI Code Review]({badge_url})"
+    readme_path = "README.md"
+    if not os.path.exists(readme_path):
+        return
+    with open(readme_path, "r+", encoding="utf-8") as f:
+        content = f.read()
+        if "![AI Code Review]" in content:
+            new_content = re.sub(r"!\[AI Code Review\]\(.*?\)", badge_md, content)
+        else:
+            new_content = badge_md + "\n\n" + content
+        f.seek(0)
+        f.write(new_content)
+        f.truncate()
+    subprocess.run(["git", "add", "README.md"])
+
+# === Pull Request automatique ===
+def create_auto_pr(branch_name):
+    if not GITHUB_TOKEN or not GITHUB_REPOSITORY:
+        print("⚠️ Token GitHub manquant.")
+        return
+    url = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/pulls"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    data = {
+        "title": f"Auto PR: correction {branch_name}",
+        "head": branch_name,
+        "base": "main",
+        "body": "Pull Request créée automatiquement après un blocage de commit IA 🤖."
+    }
+    response = requests.post(url, headers=headers, json=data)
+    if response.status_code == 201:
+        print("✅ Pull Request créée automatiquement.")
+    else:
+        print(f"⚠️ Échec de création de PR : {response.text}")
+
+# === Programme principal ===
 def main():
     files = get_staged_files()
     if not files:
-        print("ℹ️ Aucun fichier Python ou JS détecté pour l'analyse.")
+        print("ℹ️ Aucun fichier à analyser.")
         sys.exit(0)
 
-    author_email = get_commit_author_email()
-    errors_detected = False
-    message = ""
+    author_email = subprocess.run(["git", "config", "user.email"], capture_output=True, text=True).stdout.strip()
+    errors = {}
+    has_error = False
 
-    for file in files:
-        review = review_code_with_gemini(file)
+    for f in files:
+        res = review_code_with_gemini(f)
+        if "aucune erreur syntaxique détectée" not in res.lower():
+            has_error = True
+            errors[f] = res
 
-        if "aucune erreur syntaxique détectée" not in review.lower():
-            errors_detected = True
-            message += f"\nFichier : {file}\n{review}\n"
+    pdf_path = generate_pdf_report(errors)
+    update_readme_badge(not has_error)
 
-    if errors_detected:
-        print("❌ Des erreurs de syntaxe ont été détectées :")
-        print(message)
-        if author_email:
-            html_body = f"""
-            <html>
-              <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <h2 style="color: #D32F2F;">🚫 Des erreurs de syntaxe ont été détectées !</h2>
-                <p>Bonjour 👋,</p>
-                <p>Votre commit contient des fichiers avec des erreurs de syntaxe :</p>
-                <div style="background:#f9f9f9; padding:10px; border-radius:8px;">
-                  <pre style="white-space: pre-wrap; font-family: monospace;">{message}</pre>
-                </div>
-                <p>Merci de corriger ces erreurs avant de recommitter. 💡</p>
-                <p style="margin-top:20px;">— Votre assistant de code automatisé 🤖</p>
-              </body>
-            </html>
-            """
-            send_email(
-                to_email=author_email,
-                subject="🚫 Erreurs de syntaxe détectées - Commit bloqué",
-                body=html_body,
-                is_html=True
-            )
-        sys.exit(1)  # Bloque le commit
+    if has_error:
+        print("❌ Des erreurs syntaxiques ont été détectées.")
+        html_body = f"""
+        <html><body style="font-family:Arial;">
+        <h2 style="color:#D32F2F;">🚫 Des erreurs syntaxiques ont été détectées !</h2>
+        <p>Merci de les corriger avant de recommitter.</p>
+        <p><b>Fichiers affectés :</b></p>
+        <pre>{'<br>'.join(errors.keys())}</pre>
+        <p>Le rapport PDF est joint à cet email.</p>
+        </body></html>
+        """
+        send_email(author_email, "🚫 Commit bloqué - Erreurs détectées", html_body, [pdf_path], True)
+        current_branch = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True).stdout.strip()
+        create_auto_pr(current_branch)
+        sys.exit(1)
     else:
-        print("✅ Aucune erreur syntaxique détectée. Commit autorisé.")
-        if author_email:
-            html_body_success = """
-            <html>
-              <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <h2 style="color: #388E3C;">✅ Vérification syntaxique réussie !</h2>
-                <p>Bravo 🎉, aucun problème détecté dans votre commit.</p>
-                <p>Vous pouvez continuer vos développements en toute sérénité !</p>
-                <p style="margin-top:20px;">— Votre assistant de code automatisé 🤖</p>
-              </body>
-            </html>
-            """
-            send_email(
-                to_email=author_email,
-                subject="✅ Vérification syntaxique réussie - Commit validé",
-                body=html_body_success,
-                is_html=True
-            )
+        print("✅ Aucun problème détecté. Commit autorisé.")
+        html_body = """
+        <html><body style="font-family:Arial;">
+        <h2 style="color:#388E3C;">✅ Vérification réussie !</h2>
+        <p>Aucun problème syntaxique détecté. Bravo 👏</p>
+        </body></html>
+        """
+        send_email(author_email, "✅ Commit validé", html_body, [pdf_path], True)
         sys.exit(0)
 
 if __name__ == "__main__":
