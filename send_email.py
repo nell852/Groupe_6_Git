@@ -2,12 +2,25 @@ import smtplib
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
 import os
+from typing import Optional
 
+# Chargement des variables d'environnement
 load_dotenv()
 
-def send_email(to_email, subject, message):
-    sender_email = os.getenv("EMAIL_USER")
-    password = os.getenv("EMAIL_PASS")
+def send_email(to_email: str, subject: str, message: str) -> None:
+    """
+    Envoie un email simple (texte) via SMTP Gmail.
+
+    Args:
+        to_email (str): Adresse email du destinataire.
+        subject (str): Sujet de l'email.
+        message (str): Contenu du message.
+    """
+    sender_email: Optional[str] = os.getenv("EMAIL_USER")
+    password: Optional[str] = os.getenv("EMAIL_PASS")
+
+    if not sender_email or not password:
+        raise ValueError("❌ Les variables EMAIL_USER ou EMAIL_PASS ne sont pas définies dans le fichier .env")
 
     msg = MIMEText(message)
     msg["Subject"] = subject
