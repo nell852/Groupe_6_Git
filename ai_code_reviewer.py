@@ -9,7 +9,6 @@ import google.generativeai as genai
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-import requests
 
 # === Chargement des variables d'environnement ===
 load_dotenv()
@@ -17,8 +16,6 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 EMAIL_SENDER = os.getenv("EMAIL_SENDER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY")  # ex: "user/repo"
 
 if not GEMINI_API_KEY:
     print("❌ GEMINI_API_KEY manquant.", file=sys.stderr)
@@ -119,25 +116,6 @@ def update_readme_badge(success):
         f.truncate()
     subprocess.run(["git", "add", "README.md"])
 
-# === Pull Request automatique ===
-def create_auto_pr(branch_name):
-    if not GITHUB_TOKEN or not GITHUB_REPOSITORY:
-        print("⚠️ Token GitHub manquant.")
-        return
-    url = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/pulls"
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-    data = {
-        "title": f"Auto PR: correction {branch_name}",
-        "head": branch_name,
-        "base": "main",
-        "body": "Pull Request créée automatiquement après un blocage de commit IA 🤖."
-    }
-    response = requests.post(url, headers=headers, json=data)
-    if response.status_code == 201:
-        print("✅ Pull Request créée automatiquement.")
-    else:
-        print(f"⚠️ Échec de création de PR : {response.text}")
-
 # === Programme principal ===
 def main():
     files = get_staged_files()
@@ -170,8 +148,6 @@ def main():
         </body></html>
         """
         send_email(author_email, "🚫 Commit bloqué - Erreurs détectées", html_body, [pdf_path], True)
-        current_branch = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True).stdout.strip()
-        create_auto_pr(current_branch)
         sys.exit(1)
     else:
         print("✅ Aucun problème détecté. Commit autorisé.")

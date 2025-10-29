@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // --- Fonction pour ajouter une entrée dans l’historique ---
-    function addToHistory(entry {
+    function addToHistory(entry) {
         if (!entry) return; // Évite les lignes vides
 
         const line = document.createElement("div");
