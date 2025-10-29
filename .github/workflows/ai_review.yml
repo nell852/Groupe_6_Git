@@ -43,8 +43,17 @@ jobs:
             exit 1
           }
 
+      - name: 🧾 Vérification du rapport PDF
+        id: check_pdf
+        run: |
+          if [ -f ai_report.pdf ]; then
+            echo "file_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "file_exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: 🧾 Upload du rapport PDF (si généré)
-        if: always() && exists('ai_report.pdf')
+        if: steps.check_pdf.outputs.file_exists == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: AI-Review-Report
@@ -65,7 +74,7 @@ jobs:
           git config user.name "AI Reviewer Bot"
           git config user.email "ai-reviewer@github.com"
           git add README.md
-          git commit -m "🔄 Mise à jour automatique du badge AI Code Review"
+          git commit -m "🔄 Mise à jour automatique du badge AI Code Review" || echo "Aucun changement à committer"
           git push origin HEAD:${{ github.ref }}
 
       - name: 🔁 Création automatique d’une Pull Request si push refusé
