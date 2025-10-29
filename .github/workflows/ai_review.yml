@@ -27,7 +27,7 @@ jobs:
             pip install -r requirements.txt
           else
             echo "⚠️ Aucun fichier requirements.txt trouvé, installation ignorée."
-         fi
+          fi
 
       - name: 🗑️ Supprimer l’ancien rapport PDF
         run: |
