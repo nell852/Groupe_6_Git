@@ -17,10 +17,8 @@ Elle inclut un affichage dynamique, un historique des calculs, un bouton pour ch
 - ✅ Bouton vers une page "À propos"  
 
 
-# 🤖 AI Code Review Status
 
-![AI Code Review](https://img.shields.io/badge/AI%20Code%20Review-FAIL-red)
 
 Ce badge affiche automatiquement :
-- ✅ Vert : le workflow AI Code Review a réussi (aucune erreur détectée)
 - ❌ Rouge : le workflow a échoué (erreurs détectées par l’IA)
+![](https://img.shields.io/badge/AI%20Code%20Review-❌%20Échec-red?style=for-the-badge)
